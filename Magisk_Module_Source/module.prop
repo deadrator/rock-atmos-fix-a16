@@ -1,0 +1,6 @@
+id=audio_policy_fix
+name=Atmos Fix [Pong ATMOS]
+version=v1.0
+versionCode=100
+author=deadrator
+description=TWS-only Dolby Atmos fix for Poco M5 (rock / Helio G99) on Android 16 custom ROMs: routes deep_buffer + spatializer output flags to Bluetooth A2DP so DAP renders multi-channel audio on earbuds. Enables native spatializer and Dolby DAP props. Primary speaker/earpiece path is untouched.

@@ -1,0 +1,10 @@
+# Built module zips - release artifacts live on GitHub Releases
+*.zip
+
+# Local working files
+Backups/
+*.log
+
+# OS junk
+Thumbs.db
+.DS_Store

@@ -1,0 +1,9 @@
+# Android 13+ Native Spatial Audio Flags
+ro.audio.spatializer_enabled=true
+ro.spatializer.supported=true
+ro.spatializer.pose_predictor_type=0
+
+# Dolby Mobile Service & DAP spatializer flags
+vendor.audio.dolby.ds2.enabled=true
+vendor.audio.dolby.ds2.hardbypass=false
+ro.vendor.audio.spatializer.enabled=true
