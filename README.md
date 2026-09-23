@@ -128,3 +128,7 @@ adb shell cat /data/adb/audio_policy_fix_status.log
 ## 🔙 Rollback
 
 Disable the module in KernelSU/Magisk Manager and reboot — the stock `bluetooth_audio_policy_configuration.xml` is untouched on `/vendor`. If needed, restore from your Step 0 backup archive via recovery/fastboot.
+
+## Special Thanks
+@piyushAdy
+@Asmodeus7999
