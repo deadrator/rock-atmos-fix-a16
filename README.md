@@ -170,7 +170,6 @@ Identical crash reported on crDroid Android 16 (OnePlus Open — different OEM, 
 
 - crDroid A16 thread reporting the same crash + maintainer response: <https://xdaforums.com/t/rom-16-oneplus-open-crdroid-v12-official.4786300/page-2>
 - The Dolby port used by most A16 ROMs (including this device's): <https://github.com/Pong-Development/hardware_dolby>
-- Infinity-X ROM downloads (v3.12 is its final A16 QPR2 build): <https://projectinfinity-x.com/downloads>
 
 ### Fix routes (upstream only — do not attempt locally)
 
