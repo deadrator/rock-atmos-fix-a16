@@ -125,6 +125,63 @@ adb shell cat /data/adb/audio_policy_fix_status.log
 * **DAP tuning data:** if the `hardware_dolby` fork ships a generic donor `dax_config` / endpoint parameter table with no per-device retuning, the effect attaches cleanly but renders near-flat. That is a data problem, not a module bug — diff the endpoint table against a donor device rather than re-flashing.
 * **OEM hardware:** untested on anything but Poco M5 (rock) stock hardware paths.
 
+## 🧨 Related Finding — `vendor.dolby.media.c2@1.0-service` SIGSEGV (NOT this module)
+
+A separate, pre-existing crash was investigated on-device (2026-09-24). Documented here because it lives in the same Dolby stack — and to make explicit that `audio_policy_fix` is **not** involved.
+
+### What happens
+
+The Dolby C2 decoder HAL (`vendor.dolby.media.c2@1.0-service`) occasionally SIGSEGVs when rapidly skipping tracks in Atmos/EAC-3 content. init restarts it in under a second; playback continues; no audio drop, no data loss. Nuisance-class, self-healing.
+
+### Crash signature (reproduced on demand)
+
+Automated skip-storm test (15 rapid `KEYCODE_MEDIA_NEXT`, 3 s apart, Atmos album): **5 SIGSEGVs in ~50 s**, crash buffer 0 → 21 entries. Crash #5 carried the **same library, same frame, same BuildId** as the spontaneous tombstone from normal listening — one bug, two ways to reach it.
+
+```text
+signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), read fault
+  #00 libstagefright_bufferpool@2.0.1.so — MessageQueueBase::~MessageQueueBase /
+      MessageQueueBase::beginRead / AccessorInvalidator::addAccessor
+  #01 BufferPoolClient::Impl::~Impl / ReleaseCache::~ReleaseCache
+  — or —
+  #00 libcodec2_soft_ddpdec.so (dap_cpdp_process)  <-- DD+ decoder on a freed input buffer
+```
+
+### Root cause (analysis)
+
+Three-way vintage mismatch inside the `hardware_dolby` port model:
+
+| Component | Source (per the port's `Android.bp`) |
+|---|---|
+| `vendor.dolby.media.c2@1.0-service` | **Sony**-sourced prebuilt blob |
+| `libcodec2_soft_ddpdec.so` (DD+ decoder) | **Xiaomi** prebuilt blob |
+| `libstagefright_bufferpool@2.0.1.so` (the other crasher) | **NOT in the port** — the ROM's own fresh AOSP 16 build |
+
+Old blobs carry stale buffer-lifetime assumptions; the new platform bufferpool changed behavior under them; rapid codec create/destroy (track skipping) trips the teardown race. None of the crash frames touch audio policy, AudioFlinger effects, or DAP processing — `DlbDap2Process` counters kept incrementing straight through the crash window.
+
+### Scope — port-class, not device-specific
+
+Identical crash reported on crDroid Android 16 (OnePlus Open — different OEM, different SoC), where the maintainer's verdict was: *"Vendor blob issue. No visible user impact."* As of 2026-09-24 there are **zero open issues** on the port's GitHub.
+
+### Risk assessment
+
+**Low.** Self-healing restart, no user-visible failure beyond a tombstone. Aggravating factor only: rapid skipping on Atmos/EAC-3 streams. The related "first track needs play pressed twice after cold start" symptom is a crash-free stall in the same decode path (verified: no new tombstones, C2 service PID unchanged).
+
+### Links / prior art
+
+- crDroid A16 thread reporting the same crash + maintainer response: <https://xdaforums.com/t/rom-16-oneplus-open-crdroid-v12-official.4786300/page-2>
+- The Dolby port used by most A16 ROMs (including this device's): <https://github.com/Pong-Development/hardware_dolby>
+- Infinity-X ROM downloads (v3.12 is its final A16 QPR2 build): <https://projectinfinity-x.com/downloads>
+
+### Fix routes (upstream only — do not attempt locally)
+
+1. **Port repo:** file an issue on `Pong-Development/hardware_dolby` requesting a newer blob vintage (Sony C2 service / Xiaomi ddpdec) — they control blob selection.
+2. **ROM repo:** hotfix request — cherry-pick the upstream AOSP `libstagefright_bufferpool` race fixes (MessageQueue destructor paths) into the ROM's platform build.
+3. **User-side mitigation:** avoid rapid skipping on Atmos/EAC-3 albums, or set the player's Atmos mode to Off when queue-hopping (AAC tracks never enter the fragile decoder).
+
+Local patching is explicitly **not recommended**: the crashing blobs are closed-source, and the AOSP lib is ABI-entangled with the ROM's custom HIDL build.
+
+---
+
 ## 🔙 Rollback
 
 Disable the module in KernelSU/Magisk Manager and reboot — the stock `bluetooth_audio_policy_configuration.xml` is untouched on `/vendor`. If needed, restore from your Step 0 backup archive via recovery/fastboot.
