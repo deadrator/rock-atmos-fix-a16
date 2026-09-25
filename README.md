@@ -63,6 +63,15 @@ It does not redistribute proprietary Dolby blobs.
 
 Flash `audio_policy_fix.zip`, then reboot. KernelSU/APatch installations need a working system/vendor mount metamodule if the manager does not provide one.
 
+### Automated GitHub release
+
+`.github/workflows/release.yml` builds, validates and publishes the same ZIP. A release can be created in either of two ways:
+
+1. Push a version tag matching `version=` in `Magisk_Module_Source/module.prop` (for example, `v2.0`).
+2. Run **Build and publish module** from GitHub Actions and enter that tag.
+
+The workflow rejects mismatched versions or malformed archives, uploads a 30-day Actions artifact, and attaches both `audio_policy_fix.zip` and `audio_policy_fix.zip.sha256` to the GitHub release. Re-running it for an existing release replaces those two assets.
+
 ## Verify the pipeline
 
 Use the commands in [steps.md](steps.md). A valid test requires all of these:
