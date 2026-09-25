@@ -8,7 +8,6 @@
 #   META-INF/com/google/android/{update-binary,updater-script}
 #   module.prop
 #   system.prop
-#   system/vendor/etc/audio_effects.xml
 #   system/vendor/etc/bluetooth_audio_policy_configuration.xml
 #   system/vendor/etc/permissions/android.hardware.audio.spatializer.xml
 #
@@ -33,14 +32,12 @@ cd "$SRC_DIR"
 for f in META-INF/com/google/android/update-binary \
          META-INF/com/google/android/updater-script \
          module.prop system.prop post-fs-data.sh service.sh \
-         system/vendor/etc/audio_effects.xml \
          system/vendor/etc/bluetooth_audio_policy_configuration.xml \
          system/vendor/etc/permissions/android.hardware.audio.spatializer.xml; do
   [ -f "$f" ] || { echo "ERROR: missing required module file: $f" >&2; exit 1; }
 done
 if command -v xmllint >/dev/null 2>&1; then
-  for xml in system/vendor/etc/audio_effects.xml \
-             system/vendor/etc/bluetooth_audio_policy_configuration.xml \
+  for xml in system/vendor/etc/bluetooth_audio_policy_configuration.xml \
              system/vendor/etc/permissions/android.hardware.audio.spatializer.xml; do
     xmllint --noout "$xml" || { echo "ERROR: $xml is not well-formed" >&2; exit 1; }
   done

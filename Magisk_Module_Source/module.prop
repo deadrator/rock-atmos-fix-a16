@@ -1,6 +1,6 @@
 id=audio_policy_fix
 name=Dolby Spatializer Fix [Pong ATMOS]
-version=v2.0
-versionCode=200
+version=v2.1
+versionCode=210
 author=deadrator
-description=Registers Pong's dedicated libswspatializer effect and exposes a Bluetooth A2DP spatializer output on Poco M5 (rock/stone), Android 16. The framework sends multichannel PCM to Dolby's renderer, which produces binaural stereo for TWS.
+description=Dolby spatializer + TWS fix for Poco M5 (rock/stone), Android 16. Registers the android.hardware.audio.spatializer feature, exposes a dedicated Bluetooth spatializer output, and restores the deep-buffer A2DP profile for stutter-free playback with the spatializer stage active. No effects-config overlay: the ROM's stock audio_effects.xml already registers libswspatializer.

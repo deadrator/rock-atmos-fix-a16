@@ -8,27 +8,20 @@ See [How the media pipeline works](docs/MEDIA_PIPELINE.md) for the evidence and 
 
 ## Why v1 sounded like a stereo-width enhancer
 
-The old module configured a mix port with `AUDIO_OUTPUT_FLAG_SPATIALIZER`, but did not register `libswspatializer.so` in the live effects configuration. It registered only `libswdap.so`, whose controls include headphone virtualization and stereo widening. A policy flag alone is not a renderer.
+The old module configured a mix port with `AUDIO_OUTPUT_FLAG_SPATIALIZER`, but the ROM's effects configuration was never verified on-device. It has since been verified: the stock `/vendor/etc/audio_effects.xml` **does** register `libswspatializer.so` (UUID `ccd4cf09-a79d-46c2-9aae-06a1698d6c8f`), so v1's remaining gap was the missing `android.hardware.audio.spatializer` feature declaration, not a missing effect registration. `libswdap.so` (DAP) and `libswspatializer.so` (framework spatializer) remain separate effects in that config; DAP's stereo-width controls are a different processing path from the spatializer renderer.
 
-The old `DEEP_BUFFER` edit was also based on a false premise. Deep buffer controls latency/power routing; it does not preserve multichannel content. v2 leaves normal A2DP untouched.
+Deep buffer does not preserve multichannel content, but it is not merely a latency flag either — see the v2.1 section for why it is restored.
 
 ## v2 changes
 
 The module overlays:
 
 ```text
-/vendor/etc/audio_effects.xml
 /vendor/etc/bluetooth_audio_policy_configuration.xml
 /vendor/etc/permissions/android.hardware.audio.spatializer.xml
 ```
 
 The relevant entries are:
-
-```xml
-<library name="spatializer" path="libswspatializer.so"/>
-<effect name="spatializer" library="spatializer"
-        uuid="ccd4cf09-a79d-46c2-9aae-06a1698d6c8f"/>
-```
 
 ```xml
 <mixPort name="spatial output" role="source"
@@ -42,9 +35,7 @@ The relevant entries are:
 
 ## Important compatibility warning
 
-`audio_effects.xml` is a complete, device-specific file, not a merge fragment. This module is intended for the stated Infinity-X/Pong build on rock/stone. Do not flash it on an unrelated ROM: replacing another device's effects file can remove its vendor effects or prevent audioserver from loading effects.
-
-The module assumes the ROM already ships the Pong binaries and services, especially:
+This module is intended for Pong-stack builds on rock/stone. Do not flash it on an unrelated ROM. The module assumes the ROM already ships the Pong binaries and services, especially:
 
 ```text
 /vendor/lib64/soundfx/libswspatializer.so
@@ -62,6 +53,23 @@ It does not redistribute proprietary Dolby blobs.
 ```
 
 Flash `audio_policy_fix.zip`, then reboot. KernelSU/APatch installations need a working system/vendor mount metamodule if the manager does not provide one.
+
+### v2.1 — corrected merge of the v2 redesign
+
+v2 (PR #1) fixed two real gaps but introduced an audible Bluetooth stutter regression and a redundant overlay. v2.1 keeps the fixes and reverts the regressions:
+
+**Kept from v2**
+
+- The dedicated `spatial output` mixPort (`AUDIO_OUTPUT_FLAG_SPATIALIZER`) routed to `BT A2DP Out` / `BT A2DP Headphones`.
+- The `android.hardware.audio.spatializer` feature declaration (this ROM does not ship it — verified on-device).
+
+**Reverted, and why**
+
+- **`audio_effects.xml` overlay removed.** Its premise was false: the ROM's stock `/vendor/etc/audio_effects.xml` *already* registers `libswspatializer.so` with UUID `ccd4cf09-a79d-46c2-9aae-06a1698d6c8f` (verified in the live vendor file). A complete-file overlay that duplicates a device file that already says the same thing only adds risk of dropping vendor-specific effect chain details. The module is ROM-agnostic again.
+- **`DEEP_BUFFER` restored on `a2dp output`.** Removing it was the stutter cause. Deep buffer does not preserve Atmos channels (that part of the v2 analysis was correct), but it *is* the resilience buffer: it gives the BT mix ~200 ms of scheduling headroom, which matters once the spatializer stage adds CPU load and Bluetooth is aggressively underclocked. Without it the small default A2DP buffer under-runs and every hiccup becomes an audible glitch. The spatial output port coexists with it exactly as in the AOSP reference design.
+- **`system.prop` restored** to the on-device-verified set: `ds2.enabled=true` (DAP processing confirmed live via `DlbDap2Process` counters), `ro.vendor.audio.spatializer.enabled=true`, `ro.spatializer.supported=true`, `pose_predictor_type=0`. The `spatializer_transaural_enabled_default` prop was dropped (never part of this device's verified config).
+
+**Net effect:** flash v2.1 if you had v2 installed and heard BT stutter; expect the stutter to disappear with spatial audio still available.
 
 ### Automated GitHub release
 

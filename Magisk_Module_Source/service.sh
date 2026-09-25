@@ -12,9 +12,8 @@
 
 LOG=/data/adb/audio_policy_fix_status.log
 CHECK_FILE=/vendor/etc/bluetooth_audio_policy_configuration.xml
-EFFECTS_FILE=/vendor/etc/audio_effects.xml
 ROUTE_MARKER="AUDIO_OUTPUT_FLAG_SPATIALIZER"
-EFFECT_MARKER="ccd4cf09-a79d-46c2-9aae-06a1698d6c8f"
+DB_MARKER="AUDIO_OUTPUT_FLAG_DEEP_BUFFER"
 
 mkdir -p /data/adb 2>/dev/null
 
@@ -31,7 +30,7 @@ sleep 5
 
 # Late mount check - this is the authoritative reading.
 if [ -f "$CHECK_FILE" ] && grep -q "$ROUTE_MARKER" "$CHECK_FILE" 2>/dev/null \
-   && [ -f "$EFFECTS_FILE" ] && grep -q "$EFFECT_MARKER" "$EFFECTS_FILE" 2>/dev/null; then
+   && grep -q "$DB_MARKER" "$CHECK_FILE" 2>/dev/null; then
   STATUS="MOUNTED_OK"
 else
   STATUS="NOT_MOUNTED"
@@ -41,16 +40,20 @@ resetprop -n audio_policy_fix.status "$STATUS" 2>/dev/null || setprop audio_poli
 
 HARDBYPASS=$(getprop vendor.audio.dolby.ds2.hardbypass)
 DS2ENABLED=$(getprop vendor.audio.dolby.ds2.enabled)
+VENDOR_SPAT=$(getprop ro.vendor.audio.spatializer.enabled)
 SYS_SPAT=$(getprop ro.audio.spatializer_enabled)
+SPAT_SUPP=$(getprop ro.spatializer.supported)
 A2DP_OFFLOAD=$(getprop ro.bluetooth.a2dp_offload.supported)
 A2DP_OFFLOAD_DIS=$(getprop persist.vendor.bluetooth.a2dp_offload.disable)
 
 {
   echo "[$(date)] audio_policy_fix (TWS) late-boot check: $STATUS"
   echo "  Dolby/spatializer props:"
-  echo "    vendor.audio.dolby.ds2.hardbypass = ${HARDBYPASS:-<unset>}"
-  echo "    vendor.audio.dolby.ds2.enabled    = ${DS2ENABLED:-<unset>}"
-  echo "    ro.audio.spatializer_enabled      = ${SYS_SPAT:-<unset>}"
+  echo "    vendor.audio.dolby.ds2.hardbypass   = ${HARDBYPASS:-<unset>}"
+  echo "    vendor.audio.dolby.ds2.enabled      = ${DS2ENABLED:-<unset>}"
+  echo "    ro.vendor.audio.spatializer.enabled = ${VENDOR_SPAT:-<unset>}"
+  echo "    ro.audio.spatializer_enabled        = ${SYS_SPAT:-<unset>}"
+  echo "    ro.spatializer.supported            = ${SPAT_SUPP:-<unset>}"
   echo "  A2DP offload state:"
   echo "    ro.bluetooth.a2dp_offload.supported          = ${A2DP_OFFLOAD:-<unset>}"
   echo "    persist.vendor.bluetooth.a2dp_offload.disable = ${A2DP_OFFLOAD_DIS:-<unset>}"

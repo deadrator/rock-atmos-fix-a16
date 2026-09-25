@@ -1,8 +1,10 @@
 # Android 13+ framework spatializer gate used by AudioService.
 ro.audio.spatializer_enabled=true
+ro.spatializer.supported=true
+ro.spatializer.pose_predictor_type=0
 
-# Pong hardware_dolby defaults. DAP is controlled through the AudioEffect API;
-# ds2.enabled is deliberately false in the upstream port.
-ro.audio.spatializer_transaural_enabled_default=false
-vendor.audio.dolby.ds2.enabled=false
+# Dolby DAP / ds2 flags (verified working on-device in v1: DlbDap2Process
+# counters increment and hardbypass stays false through boot).
+vendor.audio.dolby.ds2.enabled=true
 vendor.audio.dolby.ds2.hardbypass=false
+ro.vendor.audio.spatializer.enabled=true
