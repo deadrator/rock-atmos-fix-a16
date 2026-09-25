@@ -3,11 +3,8 @@
 <module name="bluetooth" halVersion="2.0">
     <mixPorts>
         <!-- A2DP Audio Ports -->
-        <mixPort name="a2dp output" role="source" flags="AUDIO_OUTPUT_FLAG_DEEP_BUFFER">
-            <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
-                     samplingRates="44100 48000" channelMasks="AUDIO_CHANNEL_OUT_STEREO"/>
-        </mixPort>
-        <mixPort name="a2dp spatial" role="source" flags="AUDIO_OUTPUT_FLAG_SPATIALIZER">
+        <mixPort name="a2dp output" role="source"/>
+        <mixPort name="spatial output" role="source" flags="AUDIO_OUTPUT_FLAG_SPATIALIZER">
             <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
                      samplingRates="48000" channelMasks="AUDIO_CHANNEL_OUT_STEREO"/>
         </mixPort>
@@ -40,9 +37,9 @@
     </devicePorts>
     <routes>
         <route type="mix" sink="BT A2DP Out"
-               sources="a2dp output,a2dp spatial"/>
+               sources="a2dp output,spatial output"/>
         <route type="mix" sink="BT A2DP Headphones"
-               sources="a2dp output,a2dp spatial"/>
+               sources="a2dp output,spatial output"/>
         <route type="mix" sink="BT A2DP Speaker"
                sources="a2dp output"/>
         <route type="mix" sink="BT Hearing Aid Out"

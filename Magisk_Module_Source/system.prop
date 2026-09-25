@@ -1,9 +1,8 @@
-# Android 13+ Native Spatial Audio Flags
+# Android 13+ framework spatializer gate used by AudioService.
 ro.audio.spatializer_enabled=true
-ro.spatializer.supported=true
-ro.spatializer.pose_predictor_type=0
 
-# Dolby Mobile Service & DAP spatializer flags
-vendor.audio.dolby.ds2.enabled=true
+# Pong hardware_dolby defaults. DAP is controlled through the AudioEffect API;
+# ds2.enabled is deliberately false in the upstream port.
+ro.audio.spatializer_transaural_enabled_default=false
+vendor.audio.dolby.ds2.enabled=false
 vendor.audio.dolby.ds2.hardbypass=false
-ro.vendor.audio.spatializer.enabled=true

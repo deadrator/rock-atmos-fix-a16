@@ -1,190 +1,97 @@
-# Atmos Fix [Pong ATMOS] — Poco M5 (TWS)
+# Dolby Spatializer Fix — Poco M5 / Redmi 11 Prime (rock/stone)
 
-> **Project Context for LLMs:**
-> - **Environment:** Android 16 (Infinity-X custom ROM), KernelSU, MediaTek Helio G99 (Poco M5, codename `rock`).
-> - **Core Languages:** XML (Android Audio Policy), Shell, Android properties.
-> - **Primary Objective:** Route `AUDIO_OUTPUT_FLAG_DEEP_BUFFER` and `AUDIO_OUTPUT_FLAG_SPATIALIZER` output flags to Bluetooth A2DP (TWS) so Dolby Atmos / DAP (`libswdap.so`) renders multi-channel audio on earbuds instead of a forced stereo downmix.
-> - **Scope:** TWS (Bluetooth) ONLY. The primary `audio_policy_configuration.xml` is deliberately NOT shipped; Speaker, Earpiece, BT SCO and `BT A2DP Speaker` paths are untouched.
+Android 16 Magisk/KernelSU/APatch module for the Pong Dolby stack. It registers Pong's **dedicated framework spatializer** and routes its stereo binaural output to Bluetooth A2DP.
 
----
+> The TWS output is supposed to be stereo. Spatial audio for headphones renders a multichannel scene to two binaural channels on the phone. The important question is whether the renderer receives multichannel audio, not whether Bluetooth reports more than two channels.
 
-## Current Behavior vs Expected Behavior
+See [How the media pipeline works](docs/MEDIA_PIPELINE.md) for the evidence and limitations.
 
-* **Current Behavior:** `AudioFlinger: createTrack_l() mismatch (00000008 vs 00000004)` — Atmos decodes correctly but AudioFlinger forces a 2.0 stereo downmix before the DSP, because `a2dp output` in `bluetooth_audio_policy_configuration.xml` has no flags and no profile.
-* **Expected Behavior:** AudioFlinger routes the deep-buffer track (`00000008`) to the `a2dp output` mixPort, and the spatializer engine attaches on the `a2dp spatial` port for BT A2DP Out / BT A2DP Headphones.
+## Why v1 sounded like a stereo-width enhancer
 
----
+The old module configured a mix port with `AUDIO_OUTPUT_FLAG_SPATIALIZER`, but did not register `libswspatializer.so` in the live effects configuration. It registered only `libswdap.so`, whose controls include headphone virtualization and stereo widening. A policy flag alone is not a renderer.
 
-## 📂 Module Structure
+The old `DEEP_BUFFER` edit was also based on a false premise. Deep buffer controls latency/power routing; it does not preserve multichannel content. v2 leaves normal A2DP untouched.
 
-The zip MUST match this tree (steps.md Step 6):
+## v2 changes
+
+The module overlays:
 
 ```text
-audio_policy_fix.zip
-├── META-INF/
-│   └── com/
-│       └── google/
-│           └── android/
-│               ├── update-binary            <-- Magisk/KSU installer script
-│               └── updater-script           <-- "# MAGISK" dummy
-├── module.prop
-├── system.prop
-├── post-fs-data.sh                           <-- early boot mount verification
-├── service.sh                                <-- late boot prop/mount verification
-└── system/
-    └── vendor/
-        └── etc/
-            └── bluetooth_audio_policy_configuration.xml   <-- PATCHED (3 hunks)
+/vendor/etc/audio_effects.xml
+/vendor/etc/bluetooth_audio_policy_configuration.xml
+/vendor/etc/permissions/android.hardware.audio.spatializer.xml
 ```
 
----
+The relevant entries are:
 
-## 🔧 The Exact Patch (bluetooth_audio_policy_configuration.xml)
-
-Exactly 3 hunks vs the stock `/vendor/etc/bluetooth_audio_policy_configuration.xml`:
-
-### Hunk 1 — `a2dp output` gets deep_buffer flags + minimal profile
 ```xml
-<mixPort name="a2dp output" role="source" flags="AUDIO_OUTPUT_FLAG_DEEP_BUFFER">
-    <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
-             samplingRates="44100 48000" channelMasks="AUDIO_CHANNEL_OUT_STEREO"/>
-</mixPort>
+<library name="spatializer" path="libswspatializer.so"/>
+<effect name="spatializer" library="spatializer"
+        uuid="ccd4cf09-a79d-46c2-9aae-06a1698d6c8f"/>
 ```
-Stereo-only on purpose (steps.md Step 2 anti-prompt): do not add channel masks or sample rates the TWS doesn't negotiate.
 
-### Hunk 2 — new `a2dp spatial` mixPort
 ```xml
-<mixPort name="a2dp spatial" role="source" flags="AUDIO_OUTPUT_FLAG_SPATIALIZER">
+<mixPort name="spatial output" role="source"
+         flags="AUDIO_OUTPUT_FLAG_SPATIALIZER">
     <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
              samplingRates="48000" channelMasks="AUDIO_CHANNEL_OUT_STEREO"/>
 </mixPort>
 ```
 
-### Hunk 3 — routes (TWS-capable sinks only)
-```xml
-<route type="mix" sink="BT A2DP Out"
-       sources="a2dp output,a2dp spatial"/>
-<route type="mix" sink="BT A2DP Headphones"
-       sources="a2dp output,a2dp spatial"/>
-```
-`BT A2DP Speaker`, `BT Hearing Aid Out` and `hearing aid output` are byte-identical to stock.
+`BT A2DP Out` and `BT A2DP Headphones` can use that output. The normal `a2dp output`, hearing-aid route and A2DP speaker route remain non-spatial.
 
----
+## Important compatibility warning
 
-## ⚙️ system.prop (verbatim, steps.md Step 4)
+`audio_effects.xml` is a complete, device-specific file, not a merge fragment. This module is intended for the stated Infinity-X/Pong build on rock/stone. Do not flash it on an unrelated ROM: replacing another device's effects file can remove its vendor effects or prevent audioserver from loading effects.
 
-```properties
-# Android 13+ Native Spatial Audio Flags
-ro.audio.spatializer_enabled=true
-ro.spatializer.supported=true
-ro.spatializer.pose_predictor_type=0
-
-# Dolby Mobile Service & DAP spatializer flags
-vendor.audio.dolby.ds2.enabled=true
-vendor.audio.dolby.ds2.hardbypass=false
-ro.vendor.audio.spatializer.enabled=true
-```
-
----
-
-## 🚀 Installation
-
-1. Download the latest zip from the Releases page:
-   👉 **[audio_policy_fix.zip](https://github.com/deadrator/rock-atmos-fix-a16/releases/latest/download/audio_policy_fix.zip)**
-   (or build it yourself: `./build.sh`)
-2. Open KernelSU / Magisk / APatch manager, flash `audio_policy_fix.zip` as a module, reboot.
-
-> **⚠️ KernelSU / APatch requirement:** this module mounts modified configuration files directly to `/vendor/etc`. If your root solution has no built-in overlayfs mount (KernelSU Next and similar), you **MUST** install a mount metamodule (**meta-overlayfs**, **Hybrid Mount**, or **Magic Mount-rs**) first. The installer detects this and warns; without one, KernelSU silently fails to inject the file.
-
----
-
-## ✅ Post-Flash Verification
-
-**Mount status** (after reboot):
-```bash
-adb shell getprop audio_policy_fix.status     # MOUNTED_OK or NOT_MOUNTED
-adb shell cat /data/adb/audio_policy_fix_status.log
-```
-`service.sh` also snapshots the live props after boot:
-
-* Step 4 gate: `vendor.audio.dolby.ds2.hardbypass` must read `false`. If the log shows it reading back `true`, a vendor `init.rc` script wins the race and DAP is in pass-through — the module is fine; the override is the problem.
-* Step 1 gate: `ro.bluetooth.a2dp_offload.supported` — check what the log recorded. If offload is enabled, the BT HAL negotiates codec/format at connect time and may override the static mixPort profile; the DAP hook then needs to attach on the software encode path (effects config keyed to the A2DP session) instead of the XML profile alone.
-
-**Playback test with TWS connected** (steps.md Step 7):
-
-1. Play known Atmos (EAC3-JOC) content.
-2. Filter LogFox for `dap`, `hardbypass`, `EffectsConfig`, `DlbDapEndpointParamCache` during playback.
-3. Confirm `commit()` applies the **headphone/BT preset**, not the speaker preset.
-4. A/B the Atmos toggle on the same track and earbuds. If you can't hear a difference, that is a tuning-data problem (see Known Limits), not a build failure — don't re-flash chasing it.
-
----
-
-## ⚠️ Known Limits
-
-* **A2DP offload:** if `ro.bluetooth.a2dp_offload.supported=true`, the static XML profile alone may be overridden at connect time. Verify via the `service.sh` log before assuming the patch is insufficient.
-* **DAP tuning data:** if the `hardware_dolby` fork ships a generic donor `dax_config` / endpoint parameter table with no per-device retuning, the effect attaches cleanly but renders near-flat. That is a data problem, not a module bug — diff the endpoint table against a donor device rather than re-flashing.
-* **OEM hardware:** untested on anything but Poco M5 (rock) stock hardware paths.
-
-## 🧨 Related Finding — `vendor.dolby.media.c2@1.0-service` SIGSEGV (NOT this module)
-
-A separate, pre-existing crash was investigated on-device (2026-09-24). Documented here because it lives in the same Dolby stack — and to make explicit that `audio_policy_fix` is **not** involved.
-
-### What happens
-
-The Dolby C2 decoder HAL (`vendor.dolby.media.c2@1.0-service`) occasionally SIGSEGVs when rapidly skipping tracks in Atmos/EAC-3 content. init restarts it in under a second; playback continues; no audio drop, no data loss. Nuisance-class, self-healing.
-
-### Crash signature (reproduced on demand)
-
-Automated skip-storm test (15 rapid `KEYCODE_MEDIA_NEXT`, 3 s apart, Atmos album): **5 SIGSEGVs in ~50 s**, crash buffer 0 → 21 entries. Crash #5 carried the **same library, same frame, same BuildId** as the spontaneous tombstone from normal listening — one bug, two ways to reach it.
+The module assumes the ROM already ships the Pong binaries and services, especially:
 
 ```text
-signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), read fault
-  #00 libstagefright_bufferpool@2.0.1.so — MessageQueueBase::~MessageQueueBase /
-      MessageQueueBase::beginRead / AccessorInvalidator::addAccessor
-  #01 BufferPoolClient::Impl::~Impl / ReleaseCache::~ReleaseCache
-  — or —
-  #00 libcodec2_soft_ddpdec.so (dap_cpdp_process)  <-- DD+ decoder on a freed input buffer
+/vendor/lib64/soundfx/libswspatializer.so
+/vendor/lib64/soundfx/libswdap.so
+vendor.dolby.hardware.dms@2.0-service
+c2.dolby.eac3.decoder
 ```
 
-### Root cause (analysis)
+It does not redistribute proprietary Dolby blobs.
 
-Three-way vintage mismatch inside the `hardware_dolby` port model:
+## Build and install
 
-| Component | Source (per the port's `Android.bp`) |
-|---|---|
-| `vendor.dolby.media.c2@1.0-service` | **Sony**-sourced prebuilt blob |
-| `libcodec2_soft_ddpdec.so` (DD+ decoder) | **Xiaomi** prebuilt blob |
-| `libstagefright_bufferpool@2.0.1.so` (the other crasher) | **NOT in the port** — the ROM's own fresh AOSP 16 build |
+```bash
+./build.sh
+```
 
-Old blobs carry stale buffer-lifetime assumptions; the new platform bufferpool changed behavior under them; rapid codec create/destroy (track skipping) trips the teardown race. None of the crash frames touch audio policy, AudioFlinger effects, or DAP processing — `DlbDap2Process` counters kept incrementing straight through the crash window.
+Flash `audio_policy_fix.zip`, then reboot. KernelSU/APatch installations need a working system/vendor mount metamodule if the manager does not provide one.
 
-### Scope — port-class, not device-specific
+### Automated GitHub release
 
-Identical crash reported on crDroid Android 16 (OnePlus Open — different OEM, different SoC), where the maintainer's verdict was: *"Vendor blob issue. No visible user impact."* As of 2026-09-24 there are **zero open issues** on the port's GitHub.
+`.github/workflows/release.yml` builds, validates and publishes the same ZIP. A release can be created in either of two ways:
 
-### Risk assessment
+1. Push a version tag matching `version=` in `Magisk_Module_Source/module.prop` (for example, `v2.0`).
+2. Run **Build and publish module** from GitHub Actions and enter that tag.
 
-**Low.** Self-healing restart, no user-visible failure beyond a tombstone. Aggravating factor only: rapid skipping on Atmos/EAC-3 streams. The related "first track needs play pressed twice after cold start" symptom is a crash-free stall in the same decode path (verified: no new tombstones, C2 service PID unchanged).
+The workflow rejects mismatched versions or malformed archives, uploads a 30-day Actions artifact, and attaches both `audio_policy_fix.zip` and `audio_policy_fix.zip.sha256` to the GitHub release. Re-running it for an existing release replaces those two assets.
 
-### Links / prior art
+## Verify the pipeline
 
-- crDroid A16 thread reporting the same crash + maintainer response: <https://xdaforums.com/t/rom-16-oneplus-open-crdroid-v12-official.4786300/page-2>
-- The Dolby port used by most A16 ROMs (including this device's): <https://github.com/Pong-Development/hardware_dolby>
+Use the commands in [steps.md](steps.md). A valid test requires all of these:
 
-### Fix routes (upstream only — do not attempt locally)
+1. `libswspatializer.so` is registered as the spatializer effect.
+2. Android reports a nonzero multichannel immersive level and the BT route is available.
+3. The player selects `audio/eac3-joc` (or another multichannel rendition).
+4. The decoded AudioTrack remains wider than stereo before `SpatializerThread`.
+5. The spatializer thread/effect is active and outputs stereo to A2DP.
 
-1. **Port repo:** file an issue on `Pong-Development/hardware_dolby` requesting a newer blob vintage (Sony C2 service / Xiaomi ddpdec) — they control blob selection.
-2. **ROM repo:** hotfix request — cherry-pick the upstream AOSP `libstagefright_bufferpool` race fixes (MessageQueue destructor paths) into the ROM's platform build.
-3. **User-side mitigation:** avoid rapid skipping on Atmos/EAC-3 albums, or set the player's Atmos mode to Off when queue-hopping (AAC tracks never enter the fragile decoder).
+An Atmos badge, an enabled DAP toggle, `MOUNTED_OK`, or stereo Bluetooth output alone proves none of this.
 
-Local patching is explicitly **not recommended**: the crashing blobs are closed-source, and the AOSP lib is ABI-entangled with the ROM's custom HIDL build.
+## Rollback
 
----
+Disable/remove the module and reboot. The original vendor files are systemlessly restored.
 
-## 🔙 Rollback
+## Sources
 
-Disable the module in KernelSU/Magisk Manager and reboot — the stock `bluetooth_audio_policy_configuration.xml` is untouched on `/vendor`. If needed, restore from your Step 0 backup archive via recovery/fastboot.
-
-## Special Thanks
-@piyushAdy
-@Asmodeus7999
+- [AOSP spatial audio architecture](https://source.android.com/docs/core/audio/spatial)
+- [AOSP spatial audio implementation requirements](https://source.android.com/docs/core/audio/implement-spatial-audio)
+- [Pong-Development/hardware_dolby](https://github.com/Pong-Development/hardware_dolby)
+- [Public Pong/MTK spatializer integration](https://github.com/samakshkambxj/device_nothing_Galaxian/commit/902cdede1dd542ef7b5d5b7384af7a29b64ba009)
+- [Public Bluetooth spatial-output integration](https://github.com/samakshkambxj/device_nothing_Galaxian/commit/47cacfab32c6ca731ca98ad2c76ce1197271fe00)

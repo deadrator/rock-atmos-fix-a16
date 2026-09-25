@@ -1,0 +1,149 @@
+name: Build and publish module
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag (must match version= in module.prop)"
+        required: true
+        default: "v2.0"
+        type: string
+      prerelease:
+        description: "Mark the GitHub release as a prerelease"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    name: Build, verify, and release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Resolve and validate release version
+        id: version
+        shell: bash
+        env:
+          DISPATCH_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="$DISPATCH_TAG"
+          else
+            tag="$GITHUB_REF_NAME"
+          fi
+
+          module_version="$(sed -n 's/^version=//p' Magisk_Module_Source/module.prop)"
+          module_version_code="$(sed -n 's/^versionCode=//p' Magisk_Module_Source/module.prop)"
+
+          [[ "$tag" =~ ^v[0-9]+([.][0-9]+){1,2}([.-][0-9A-Za-z.-]+)?$ ]] || {
+            echo "Invalid release tag: $tag" >&2
+            exit 1
+          }
+          [[ "$module_version" == "$tag" ]] || {
+            echo "Tag $tag does not match module.prop version=$module_version" >&2
+            exit 1
+          }
+          [[ "$module_version_code" =~ ^[0-9]+$ ]] || {
+            echo "Invalid module.prop versionCode=$module_version_code" >&2
+            exit 1
+          }
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version_code=$module_version_code" >> "$GITHUB_OUTPUT"
+
+      - name: Install XML validator
+        run: sudo apt-get update && sudo apt-get install --yes libxml2-utils zip unzip
+
+      - name: Build flashable ZIP
+        run: ./build.sh
+
+      - name: Verify release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -t audio_policy_fix.zip
+
+          required=(
+            META-INF/com/google/android/update-binary
+            META-INF/com/google/android/updater-script
+            module.prop
+            system.prop
+            post-fs-data.sh
+            service.sh
+            system/vendor/etc/audio_effects.xml
+            system/vendor/etc/bluetooth_audio_policy_configuration.xml
+            system/vendor/etc/permissions/android.hardware.audio.spatializer.xml
+          )
+
+          archive_listing="$(unzip -Z1 audio_policy_fix.zip)"
+          for path in "${required[@]}"; do
+            grep -Fxq "$path" <<< "$archive_listing" || {
+              echo "Missing archive entry: $path" >&2
+              exit 1
+            }
+          done
+
+          if grep -q '^Magisk_Module_Source/' <<< "$archive_listing"; then
+            echo "The ZIP incorrectly contains a Magisk_Module_Source/ wrapper directory" >&2
+            exit 1
+          fi
+
+          sha256sum audio_policy_fix.zip > audio_policy_fix.zip.sha256
+          cat audio_policy_fix.zip.sha256
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio_policy_fix-${{ steps.version.outputs.tag }}
+          path: |
+            audio_policy_fix.zip
+            audio_policy_fix.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          PRERELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; replacing its module assets."
+            gh release upload "$RELEASE_TAG" \
+              audio_policy_fix.zip \
+              audio_policy_fix.zip.sha256 \
+              --clobber
+            exit 0
+          fi
+
+          args=(
+            release create "$RELEASE_TAG"
+            audio_policy_fix.zip
+            audio_policy_fix.zip.sha256
+            --title "Dolby Spatializer Fix $RELEASE_TAG"
+            --target "$GITHUB_SHA"
+            --generate-notes
+          )
+          if [[ "$PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh "${args[@]}"

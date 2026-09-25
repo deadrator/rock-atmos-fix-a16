@@ -4,11 +4,13 @@
 # Mirrors reference/poco-m5-incall-audio-fix/.github/workflows/build.yml:
 #   cd Magisk_Module_Source && zip -r9 ../<name>.zip *
 #
-# steps.md Step 6 structure (what the zip MUST contain):
+# Module structure (what the zip MUST contain):
 #   META-INF/com/google/android/{update-binary,updater-script}
 #   module.prop
 #   system.prop
+#   system/vendor/etc/audio_effects.xml
 #   system/vendor/etc/bluetooth_audio_policy_configuration.xml
+#   system/vendor/etc/permissions/android.hardware.audio.spatializer.xml
 #
 # Packaging backends, in order of preference:
 #   1. `zip`        - best (exec bits + forward slashes preserved)
@@ -27,16 +29,21 @@ PYTHON_BIN="python"
 
 cd "$SRC_DIR"
 
-# Sanity gate (steps.md Step 6 anti-prompt): required files present, XML well-formed.
+# Sanity gate: required files present and all XML well-formed.
 for f in META-INF/com/google/android/update-binary \
          META-INF/com/google/android/updater-script \
          module.prop system.prop post-fs-data.sh service.sh \
-         system/vendor/etc/bluetooth_audio_policy_configuration.xml; do
+         system/vendor/etc/audio_effects.xml \
+         system/vendor/etc/bluetooth_audio_policy_configuration.xml \
+         system/vendor/etc/permissions/android.hardware.audio.spatializer.xml; do
   [ -f "$f" ] || { echo "ERROR: missing required module file: $f" >&2; exit 1; }
 done
 if command -v xmllint >/dev/null 2>&1; then
-  xmllint --noout system/vendor/etc/bluetooth_audio_policy_configuration.xml \
-    || { echo "ERROR: patched BT XML is not well-formed" >&2; exit 1; }
+  for xml in system/vendor/etc/audio_effects.xml \
+             system/vendor/etc/bluetooth_audio_policy_configuration.xml \
+             system/vendor/etc/permissions/android.hardware.audio.spatializer.xml; do
+    xmllint --noout "$xml" || { echo "ERROR: $xml is not well-formed" >&2; exit 1; }
+  done
 fi
 
 rm -f "$OUT_ZIP"
