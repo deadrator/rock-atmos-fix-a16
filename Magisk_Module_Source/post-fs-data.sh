@@ -18,11 +18,14 @@ find $MODDIR/system/vendor/etc -type f -exec chmod 644 {} + 2>/dev/null
 
 LOG=/data/adb/audio_policy_fix_status.log
 CHECK_FILE=/vendor/etc/bluetooth_audio_policy_configuration.xml
-MARKER="a2dp spatial"
+EFFECTS_FILE=/vendor/etc/audio_effects.xml
+ROUTE_MARKER="AUDIO_OUTPUT_FLAG_SPATIALIZER"
+EFFECT_MARKER="ccd4cf09-a79d-46c2-9aae-06a1698d6c8f"
 
 mkdir -p /data/adb 2>/dev/null
 
-if [ -f "$CHECK_FILE" ] && grep -q "$MARKER" "$CHECK_FILE" 2>/dev/null; then
+if [ -f "$CHECK_FILE" ] && grep -q "$ROUTE_MARKER" "$CHECK_FILE" 2>/dev/null \
+   && [ -f "$EFFECTS_FILE" ] && grep -q "$EFFECT_MARKER" "$EFFECTS_FILE" 2>/dev/null; then
   STATUS="MOUNTED_OK"
 else
   STATUS="NOT_MOUNTED"
@@ -31,7 +34,8 @@ fi
 {
   echo "[$(date)] audio_policy_fix (TWS) early mount check: $STATUS"
   if [ "$STATUS" = "NOT_MOUNTED" ]; then
-    echo "  -> $CHECK_FILE does not contain the expected marker text."
+    echo "  -> The spatial route and/or Dolby spatializer effect declaration is missing."
+    echo "  -> Checked: $CHECK_FILE and $EFFECTS_FILE"
     echo "  -> On KernelSU/APatch this usually means no mount metamodule"
     echo "     (meta-overlayfs / Hybrid Mount / Magic Mount-rs) is active,"
     echo "     or it failed to mount this module."

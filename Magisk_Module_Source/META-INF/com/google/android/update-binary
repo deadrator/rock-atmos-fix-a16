@@ -17,7 +17,7 @@ abort() { ui_print "$1"; exit 1; }
 
 ui_print "*******************************************"
 ui_print "        Atmos Fix [Pong ATMOS]             "
-ui_print "   TWS deep_buffer + spatializer routing   "
+ui_print "   Dolby spatializer + TWS routing         "
 ui_print "*******************************************"
 
 mount /data 2>/dev/null
