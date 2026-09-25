@@ -86,7 +86,6 @@ jobs:
             system.prop
             post-fs-data.sh
             service.sh
-            system/vendor/etc/audio_effects.xml
             system/vendor/etc/bluetooth_audio_policy_configuration.xml
             system/vendor/etc/permissions/android.hardware.audio.spatializer.xml
           )
